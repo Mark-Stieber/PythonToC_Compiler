@@ -1,5 +1,8 @@
+import sys
 
-with open('PyCode.py', 'r') as f:
+argv = sys.argv
+
+with open(argv[1], 'r') as f:
     content = f.read()
     csplit = content.split("\n")
     #print(content.split("\n"))
@@ -12,6 +15,8 @@ with open('PyCode.py', 'r') as f:
 #65 - 90 Z
 #97 a - 122 z
 #95
+numOfLines = len(csplit)
+
 for s in range(len(csplit)):
     
     if(':' in csplit[s]):
@@ -51,15 +56,32 @@ def partTyping(part):
             Exception("INT WRONG")
 
 
+def whitespaceCheck(l,whitespace):
+    if(len(l) > 0):
+        i = 0
+        while(l[i] == " "):
+            i += 1
+    
+        return i
+    return whitespace
+
 print(csplit)
 def tokenize(parselist):
     tokens = []
     part = ""
 
+    whitespace = 0
+
     for l in parselist:
-        spacecount = 0
+
+        wsChecked = whitespaceCheck(l,whitespace)
+        if(wsChecked < whitespace):
+            whitespace = wsChecked
+            tokens.append(('END',None))
+        whitespace = wsChecked
+
         for i in l:
-            
+
             if(i in '+-*/<>=!:'):
                 if(part != ""):
                     tokens.append(partTyping(part))
@@ -104,10 +126,14 @@ def tokenize(parselist):
                     tokens.append(('OPENCURLBRAC',i))
                 if(i == '}'):
                     tokens.append(('CLOSEDCURLBRAC',i))
-            #elif(i == ' '):
-            #    spacecount += 1
-                #if(spacecount == 4):
-            #        tokens.append(('TAB','\t'))
+            elif(i == ' '):
+                if(part != ""):
+                    tokens.append(partTyping(part))
+                part = ""
+
+    if(whitespace > 0):
+        tokens.append(('END',None))
+
     return tokens
 
 print()
@@ -141,9 +167,9 @@ def expect(T,tokenName):
     raise Exception("Unexpected Token")
 
 def term(T,var,blockstr):
-    if(T.currentToken[0] == 'EQUALS'):
+    if(T.currentToken[0] == 'EQUAL'):
         blockstr += '='
-        expect(T,'EQUALS')
+        expect(T,'EQUAL')
     
     if(T.currentToken[0] == 'IDENTIFIER'):
         if(T.currentToken[1] in T.assignTokens):
@@ -183,20 +209,49 @@ def expression(T,var,blockstr):
 
     return blockstr
 
+def operator(T, blockstr):
+    while(T.currentToken[0] == 'EQUAL' or T.currentToken[0] == 'GTHAN' or T.currentToken[0] == 'LTHAN'):
+            if(accept(T,'EQUAL')):
+                blockstr += '='
+            elif(accept(T,'GTHAN')):
+                blockstr += '>'
+            elif(accept(T,'LTHAN')):
+                blockstr += '<'
+
+    return blockstr
+
+
+def condition(T, blockstr):
+    if(T.currentToken[0] == 'IDENTIFIER'):
+        var = T.currentToken[1]
+        blockstr = term(T,var,blockstr)
+        blockstr = operator(T,blockstr)
+        blockstr = term(T,var,blockstr)
+
+
+    else:
+        var = T.currentToken[1]
+        blockstr = term(T,var,blockstr)
+        blockstr = operator(T,blockstr)
+        blockstr = term(T,var,blockstr)
+
+    blockstr += ')'
+
+    return blockstr
 
 def assignment(T,var,blockstr):
     
     if(T.assignTokens[var] == None):
         if(T.currentToken[0] == 'IDENTIFIER'):
             T.assignTokens[var] = T.assignTokens[T.currentToken[1]]
-            blockstr = str(T.assignTokens[var]).lower()+" "+blockstr
+            blockstr = str(T.assignTokens[var]).lower()+" "+blockstr[:1]
             
             blockstr = term(T,var,blockstr)
             blockstr = expression(T,var,blockstr)
             
         if(T.currentToken[0] == 'INT' or T.currentToken[0] == 'FLOAT'):
             T.assignTokens[var] = T.currentToken[0]
-            blockstr = str(T.currentToken[0]).lower()+" "+blockstr
+            blockstr = '\t'+str(T.currentToken[0]).lower()+" "+blockstr[1:]
             
             blockstr = term(T,var,blockstr)
             blockstr = expression(T,var,blockstr)
@@ -218,17 +273,23 @@ def assignment(T,var,blockstr):
             
             blockstr = term(T,var,blockstr)
             blockstr = expression(T,var,blockstr)
-            
+     
     
     return blockstr
 
 #Takes in a block of the code and parses through it using the Tokens Class
 def block(T):
+    if(len(T.tokenslist) == 0):
+        return ""
+
     blockstr = ""
     #if a IDENTIFIER is seen first
     if(T.currentToken[0] == 'IDENTIFIER'):
         if(T.currentToken[1] not in T.assignTokens):
             T.assignTokens[T.currentToken[1]] = None
+
+        blockstr += "\t"
+
         var = T.currentToken[1]
         blockstr += var + ' '
         expect(T,'IDENTIFIER')
@@ -243,18 +304,36 @@ def block(T):
         #    blockstr += '/'
         
         blockstr += '= '
-        expect(T,'EQUAL')
+        accept(T,'EQUAL')
         print(T.assignTokens)
         blockstr = assignment(T,var,blockstr)
         blockstr += ';'
         accept(T,'SEMICOLON') #change to expect later
+        blockstr += '\n'
     
     #if a KEYWORD is seen first
     if(T.currentToken[0] == 'KEYWORD'):
         if(T.currentToken[1] == 'while'):
-            pass
+            blockstr += "\t"
+            expect(T,'KEYWORD')
+            blockstr += "while "
+            accept(T,'OPENPAR')
+            blockstr += '('
+            blockstr = condition(T,blockstr)
+            accept(T,'CLOSEDPAR')
+            expect(T,'COLON')
+            blockstr += "{"
+            blockstr += '\n'
+
+
         if(T.currentToken[1] == 'if'):
-            pass
+            blockstr += "\t"
+
+            blockstr += '\n'
+        
+    if(T.currentToken[0] == 'END'):
+        blockstr += '}'
+        expect(T,'END')
     
     return blockstr
 
@@ -262,9 +341,8 @@ def block(T):
 tokens = Tokens(tokenslist)
 
 newmessage = ""
-for i in range(4):
-    newmessage = newmessage+"\t"+block(tokens)
-    newmessage+="\n"
+for i in range(numOfLines):
+    newmessage = newmessage+block(tokens)
     
 
 print()
@@ -276,8 +354,8 @@ print(newmessage)
 
 output = "#include <stdio.h>\n\nint main(int argc, char* argv[]){\n\n"+newmessage+"\n\treturn 0; \n}"
 
-#with open("Cprogram.c", "w") as file:
-    #file.write(output)
+with open(argv[2], "w") as file:
+    file.write(output)
 
 #indentifier x, y, epic_value
 
