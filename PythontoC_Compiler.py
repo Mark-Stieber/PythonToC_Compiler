@@ -5,25 +5,21 @@ argv = sys.argv
 with open(argv[1], 'r') as f:
     content = f.read()
     csplit = content.split("\n")
-    #print(content.split("\n"))
     
     
 
 #def tokenize():
 #scanner
 
-#65 - 90 Z
-#97 a - 122 z
-#95
 numOfLines = len(csplit)
 
 for s in range(len(csplit)):
-    
-    if(':' in csplit[s]):
-       pass
-    elif(csplit[s].lstrip() != ''):
-        csplit[s] += ';'
+    newc = csplit[s].rstrip()
+    if(newc != '' and not(':' in newc)):
+        newc += ';'
+        csplit[s] = newc
 
+print(csplit)
 def partTyping(part):
     #IF AND WHILE
     if(len(part) == 0):
@@ -32,9 +28,15 @@ def partTyping(part):
     if(part == "while"):
         return ("KEYWORD",part)
     
-    elif(part == "if"):
+    if(part == "if"):
         return ("KEYWORD",part)
     
+    if(part == "and"):
+        return ("AND", part)
+
+    if(part == "or"):
+        return ("OR", part)
+
     #Identifier
     if((65 <= ord(part[0]) <= 90) or (97 <= ord(part[0]) <= 122)):
         for i in part:
@@ -59,10 +61,11 @@ def partTyping(part):
 def whitespaceCheck(l,whitespace):
     if(len(l) > 0):
         i = 0
-        while(l[i] == " "):
+        while(i < len(l)):
+            if(l[i] != " "):
+                return i 
             i += 1
     
-        return i
     return whitespace
 
 print(csplit)
@@ -71,14 +74,34 @@ def tokenize(parselist):
     part = ""
 
     whitespace = 0
+    indentstack = []
+
 
     for l in parselist:
 
+        emptycheck = 1
+        if(len(l) == 0):
+            emptycheck = 0
+            tokens.append(('EMPTY',None))
+
         wsChecked = whitespaceCheck(l,whitespace)
-        if(wsChecked < whitespace):
-            whitespace = wsChecked
+    
+        if(whitespace < wsChecked):
+            indentstack.append(whitespace)
+
+        elif(whitespace > wsChecked):
+            emptycheck = 1
+            while(indentstack[-1] != wsChecked):
+                tokens.append(('SPACE',indentstack.pop(-1)))
+                tokens.append(('END',None))
+            tokens.append(('SPACE',indentstack.pop(-1)))
             tokens.append(('END',None))
+                
         whitespace = wsChecked
+
+        if(wsChecked > 0 and emptycheck):   
+            tokens.append(('SPACE',wsChecked))
+            
 
         for i in l:
 
@@ -132,8 +155,10 @@ def tokenize(parselist):
                 part = ""
 
     if(whitespace > 0):
-        tokens.append(('END',None))
-
+        while(len(indentstack) > 0):
+            tokens.append(('SPACE',indentstack.pop(-1)))
+            tokens.append(('END',None))
+    
     return tokens
 
 print()
@@ -143,10 +168,11 @@ print(tokenslist)
 #C Types int float char char[]
 
 class Tokens:
-    def __init__(self,tokenslist):
+    def __init__(self,tokenslist,linecount):
         self.tokenslist = tokenslist
         self.currentToken = tokenslist[0]
         self.assignTokens = {}
+        self.linecount = linecount
     
 
 def accept(T,tokenName):
@@ -210,26 +236,32 @@ def expression(T,var,blockstr):
     return blockstr
 
 def operator(T, blockstr):
-    while(T.currentToken[0] == 'EQUAL' or T.currentToken[0] == 'GTHAN' or T.currentToken[0] == 'LTHAN'):
+    blockstr += ' '
+    while(T.currentToken[0] == 'EQUAL' or T.currentToken[0] == 'GTHAN' 
+          or T.currentToken[0] == 'LTHAN' or T.currentToken[0] == 'NOT'):
             if(accept(T,'EQUAL')):
                 blockstr += '='
             elif(accept(T,'GTHAN')):
                 blockstr += '>'
             elif(accept(T,'LTHAN')):
                 blockstr += '<'
-
+            elif(accept(T,'NOT')):
+                blockstr += '!'
+            
+    blockstr += ' '
     return blockstr
 
 
 def condition(T, blockstr):
-    if(T.currentToken[0] == 'IDENTIFIER'):
-        var = T.currentToken[1]
-        blockstr = term(T,var,blockstr)
-        blockstr = operator(T,blockstr)
-        blockstr = term(T,var,blockstr)
+    
+    while(T.currentToken[0] != 'COLON' and T.currentToken[0] != 'CLOSEDPAR'):
+        if(T.currentToken[0] == 'AND'):
+            blockstr += " && "
+            expect(T,'AND')
+        if(T.currentToken[0] == 'OR'):
+            blockstr += " || "
+            expect(T,'OR')
 
-
-    else:
         var = T.currentToken[1]
         blockstr = term(T,var,blockstr)
         blockstr = operator(T,blockstr)
@@ -244,14 +276,14 @@ def assignment(T,var,blockstr):
     if(T.assignTokens[var] == None):
         if(T.currentToken[0] == 'IDENTIFIER'):
             T.assignTokens[var] = T.assignTokens[T.currentToken[1]]
-            blockstr = str(T.assignTokens[var]).lower()+" "+blockstr[:1]
+            blockstr = str(T.assignTokens[var]).lower()+" "+blockstr
             
             blockstr = term(T,var,blockstr)
             blockstr = expression(T,var,blockstr)
             
         if(T.currentToken[0] == 'INT' or T.currentToken[0] == 'FLOAT'):
             T.assignTokens[var] = T.currentToken[0]
-            blockstr = '\t'+str(T.currentToken[0]).lower()+" "+blockstr[1:]
+            blockstr = str(T.currentToken[0]).lower()+" "+blockstr
             
             blockstr = term(T,var,blockstr)
             blockstr = expression(T,var,blockstr)
@@ -283,12 +315,17 @@ def block(T):
         return ""
 
     blockstr = ""
+    spacecount = 0
+    if(T.currentToken[0] == 'SPACE'):
+        spacecount = T.currentToken[1]
+        expect(T,'SPACE')
+
     #if a IDENTIFIER is seen first
     if(T.currentToken[0] == 'IDENTIFIER'):
         if(T.currentToken[1] not in T.assignTokens):
             T.assignTokens[T.currentToken[1]] = None
 
-        blockstr += "\t"
+        
 
         var = T.currentToken[1]
         blockstr += var + ' '
@@ -310,13 +347,16 @@ def block(T):
         blockstr += ';'
         accept(T,'SEMICOLON') #change to expect later
         blockstr += '\n'
+        blockstr = "\t"+blockstr
     
     #if a KEYWORD is seen first
-    if(T.currentToken[0] == 'KEYWORD'):
+    elif(T.currentToken[0] == 'KEYWORD'):
         if(T.currentToken[1] == 'while'):
+            T.linecount += 1
+
             blockstr += "\t"
             expect(T,'KEYWORD')
-            blockstr += "while "
+            blockstr += "while"
             accept(T,'OPENPAR')
             blockstr += '('
             blockstr = condition(T,blockstr)
@@ -327,22 +367,41 @@ def block(T):
 
 
         if(T.currentToken[1] == 'if'):
-            blockstr += "\t"
+            T.linecount += 1
 
+            blockstr += "\t"
+            expect(T,'KEYWORD')
+            blockstr += "if"
+            accept(T,'OPENPAR')
+            blockstr += '('
+            blockstr = condition(T,blockstr)
+            accept(T,'CLOSEDPAR')
+            expect(T,'COLON')
+            blockstr += "{"
             blockstr += '\n'
         
     if(T.currentToken[0] == 'END'):
-        blockstr += '}'
+        blockstr += '\t}\n'
         expect(T,'END')
+
+    if(T.currentToken[0] == 'EMPTY'):
+        blockstr += '\n'
+        expect(T,'EMPTY')
+
+    if(spacecount > 0):
+        for sp in range(spacecount):
+            blockstr = " "+blockstr
     
     return blockstr
 
   
-tokens = Tokens(tokenslist)
+tokens = Tokens(tokenslist,numOfLines)
 
 newmessage = ""
-for i in range(numOfLines):
+linesnum = 0
+while(linesnum < tokens.linecount):
     newmessage = newmessage+block(tokens)
+    linesnum += 1
     
 
 print()
