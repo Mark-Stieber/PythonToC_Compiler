@@ -71,9 +71,15 @@ def partTyping(part):
 def whitespaceCheck(l,whitespace):
     if(len(l) > 0):
         i = 0
+        count = 0
         while(i < len(l)):
-            if(l[i] != " "):
-                return i 
+            if(l[i] == "\t"):
+                count += 4
+            elif(l[i] == " "):
+                count += 1
+
+            if(l[i] != " " and l[i] != "\t"):
+                return count
             i += 1
     
     return whitespace
@@ -95,7 +101,7 @@ def tokenize(parselist):
             tokens.append(('EMPTY',None))
 
         wsChecked = whitespaceCheck(l,whitespace)
-    
+
         if(whitespace < wsChecked):
             indentstack.append(whitespace)
 
@@ -111,7 +117,7 @@ def tokenize(parselist):
 
         if(wsChecked > 0 and emptycheck):   
             tokens.append(('SPACE',wsChecked))
-            
+        
         notstring = True
         for i in l:
 
@@ -176,6 +182,12 @@ def tokenize(parselist):
                 if(part != ""):
                     tokens.append(partTyping(part))
                 part = ""
+            elif(i == chr(9)):
+                if(part != ""):
+                    tokens.append(partTyping(part))
+                part = ""
+                
+                tokens.append(('TAB',chr(9)))
                 
 
     if(whitespace > 0):
@@ -343,6 +355,12 @@ def block(T):
     if(T.currentToken[0] == 'SPACE'):
         spacecount = T.currentToken[1]
         expect(T,'SPACE')
+
+    if(T.currentToken[0] == 'TAB'):
+        spacecount = 0
+        while(T.currentToken[0] == 'TAB'):
+            blockstr += '\t'
+            expect(T,'TAB')
 
     #if a IDENTIFIER is seen first
     if(T.currentToken[0] == 'IDENTIFIER'):
