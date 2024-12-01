@@ -15,7 +15,7 @@ numOfLines = len(csplit)
 
 for s in range(len(csplit)):
     newc = csplit[s].rstrip()
-    if(newc != '' and not(':' in newc)):
+    if(newc != '' and newc[-1] != ':'):
         newc += ';'
         csplit[s] = newc
 
@@ -23,12 +23,15 @@ print(csplit)
 def partTyping(part):
     #IF AND WHILE
     if(len(part) == 0):
-        raise Exception("INVALD INPUT")
+        raise Exception("INVALID INPUT")
     
     if(part == "while"):
         return ("KEYWORD",part)
     
     if(part == "if"):
+        return ("KEYWORD",part)
+
+    if(part == "print"):
         return ("KEYWORD",part)
     
     if(part == "and"):
@@ -36,6 +39,10 @@ def partTyping(part):
 
     if(part == "or"):
         return ("OR", part)
+
+    #Check String
+    if(part[0] == '"'):
+        return ("STRING",part)
 
     #Identifier
     if((65 <= ord(part[0]) <= 90) or (97 <= ord(part[0]) <= 122)):
@@ -57,6 +64,9 @@ def partTyping(part):
         except:
             Exception("INT WRONG")
 
+    
+    raise Exception("INVALID INPUT")
+
 
 def whitespaceCheck(l,whitespace):
     if(len(l) > 0):
@@ -68,7 +78,7 @@ def whitespaceCheck(l,whitespace):
     
     return whitespace
 
-print(csplit)
+
 def tokenize(parselist):
     tokens = []
     part = ""
@@ -102,10 +112,15 @@ def tokenize(parselist):
         if(wsChecked > 0 and emptycheck):   
             tokens.append(('SPACE',wsChecked))
             
-
+        notstring = True
         for i in l:
 
-            if(i in '+-*/<>=!:'):
+            if(notstring == False):
+                part += i
+                if(i == '"'):
+                    notstring = True
+
+            elif(i in '+-*/<>=!:'):
                 if(part != ""):
                     tokens.append(partTyping(part))
                 part = ""
@@ -135,11 +150,13 @@ def tokenize(parselist):
                 
             #semicolon
             elif(i == ';'):
-                tokens.append(partTyping(part))
+                if(part != ""):
+                    tokens.append(partTyping(part))
                 part = ""
                 tokens.append(('SEMICOLON',i))
             elif(i in '(){}'):
-                tokens.append(partTyping(part))
+                if(part != ""):
+                    tokens.append(partTyping(part))
                 part = ""
                 if(i == '('):
                     tokens.append(('OPENPAR',i))
@@ -149,10 +166,17 @@ def tokenize(parselist):
                     tokens.append(('OPENCURLBRAC',i))
                 if(i == '}'):
                     tokens.append(('CLOSEDCURLBRAC',i))
+            elif(i == '"'):
+                if(part != ""):
+                    tokens.append(partTyping(part))
+                    part = ""
+                part += '"'
+                notstring = False
             elif(i == ' '):
                 if(part != ""):
                     tokens.append(partTyping(part))
                 part = ""
+                
 
     if(whitespace > 0):
         while(len(indentstack) > 0):
@@ -366,18 +390,34 @@ def block(T):
             blockstr += '\n'
 
 
-        if(T.currentToken[1] == 'if'):
+        elif(T.currentToken[1] == 'if'):
             T.linecount += 1
 
-            blockstr += "\t"
-            expect(T,'KEYWORD')
+            blockstr += '\t'
+            expect(T,"KEYWORD")
             blockstr += "if"
-            accept(T,'OPENPAR')
+            accept(T,"OPENPAR")
             blockstr += '('
             blockstr = condition(T,blockstr)
-            accept(T,'CLOSEDPAR')
-            expect(T,'COLON')
-            blockstr += "{"
+            accept(T,"CLOSEDPAR")
+            expect(T,"COLON")
+            blockstr += '{'
+            blockstr += '\n'
+        
+        elif(T.currentToken[1] == 'print'):
+            blockstr += "\t"
+            expect(T,"KEYWORD")
+            blockstr += "printf"
+            expect(T,"OPENPAR")
+            blockstr += '('
+
+            blockstr += (T.currentToken[1][:-1]+chr(92)+'n'+'"')
+            expect(T,"STRING")
+
+            expect(T,"CLOSEDPAR")
+            blockstr += ')'
+            expect(T,"SEMICOLON")
+            blockstr += ';'
             blockstr += '\n'
         
     if(T.currentToken[0] == 'END'):
@@ -404,18 +444,15 @@ while(linesnum < tokens.linecount):
     linesnum += 1
     
 
-print()
-print(tokens.tokenslist)
-print()
-print(tokens.assignTokens)
-print()
-print(newmessage)
 
 output = "#include <stdio.h>\n\nint main(int argc, char* argv[]){\n\n"+newmessage+"\n\treturn 0; \n}"
+print(newmessage)
 
 with open(argv[2], "w") as file:
     file.write(output)
 
+print()
+print(tokens.assignTokens)
 #indentifier x, y, epic_value
 
 #keywords if, while, return, print, def
